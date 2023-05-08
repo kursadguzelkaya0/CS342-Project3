@@ -38,24 +38,18 @@ int rm_thread_started(int tid) {
 }
 
 int rm_thread_ended() {
-    int ret = 0;
-    return (ret);
+    self_to_tid[getTid(pthread_self())] = -1;
+    return 0;
 }
 
 int rm_claim (int claim[]) {
-
-    // check Deadlock Avodiance is needed
-    if (DA == 1) { // Aviod Deadlock
-
-    } else { // No Avoidance
-        for(int i = 0; i < M; i++) {
-            if (claim[i] > ExistingRes[i]) {
-                printf("A process can not claim more than the total number of a resource instance!!");
-                return -1;
-            }
-            MaxDemand[getTid(pthread_self())][i] = claim[i];
-            Need[getTid(pthread_self())][i] = claim[i];
+    for(int i = 0; i < M; i++) {
+        if (claim[i] > ExistingRes[i]) {
+            printf("A process can not claim more than the total number of a resource instance!!");
+            return -1;
         }
+        MaxDemand[getTid(pthread_self())][i] = claim[i];
+        Need[getTid(pthread_self())][i] = claim[i];
     }
     return 0;
 }
@@ -114,7 +108,7 @@ int rm_request (int request[]) {
             pthread_mutex_lock(&availableRes_lock);
             // Check for source availability
             for (int i = 0; i < M; i++) {
-                Request[getTid(pthread_self())][i] = request[i];
+                Request[getTid(pthread_self())][i] += request[i];
                 if (AvailableRes[i] >= request[i]) {
                     enoughResInsCount++;
                 } else {
@@ -174,7 +168,62 @@ int rm_release (int release[]) {
 int rm_detection() {
     int ret = 11;
 
-    return 0;
+    int WorkRes[MAXR]; // represents the available pool
+    int Finished[MAXP]; 
+
+    /* Lock availableRes before accessing it */
+    pthread_mutex_lock(&availableRes_lock);
+
+    for (int i = 0; i < M; i++) {
+        WorkRes[i] = AvailableRes[i];
+    }
+
+    // Step 1
+    for (int i = 0; i < N; i++) {
+        int isFinished = 1;
+        for (int j = 0; j < M; j++) {
+            if (Request[i][j] != 0) {
+                isFinished = 0;
+                break;
+            }
+        }
+        Finished[i] = isFinished;
+    }
+
+    // Step 2
+    int found;
+    do {
+        found = 0;
+        for (int i = 0; i < N; i++) {
+            if (Finished[i] != 1) {
+                int can_run = 1;
+                for (int j = 0; j < M; j++) {
+                    if (Request[i][j] > WorkRes[j]) {
+                        can_run = 0;
+                        break;
+                    }
+                }
+                if (can_run) { // Step 3
+                    found = 1;
+                    for (int j = 0; j < M; j++) {
+                        WorkRes[j] += Allocation[i][j];
+                    }
+                    Finished[i] = 1;
+                }
+            }
+        }
+    } while (found);
+
+    // Step 4: Check if there are any deadlocked processes
+    int num_deadlocked = 0;
+    for (int i = 0; i < N; i++) {
+        if (!Finished[i]) {
+            num_deadlocked++;
+        }
+    }
+
+    pthread_mutex_unlock(&availableRes_lock);
+    return num_deadlocked;
 }
 
 void rm_print_state(char headermsg[]) {
