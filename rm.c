@@ -45,11 +45,17 @@ int rm_thread_ended() {
 int rm_claim (int claim[]) {
     for(int i = 0; i < M; i++) {
         if (claim[i] > ExistingRes[i]) {
-            printf("A process can not claim more than the total number of a resource instance!!");
+            //printf("A process can not claim more than the total number of a resource instance!!");
             return -1;
         }
-        MaxDemand[getTid(pthread_self())][i] = claim[i];
-        Need[getTid(pthread_self())][i] = claim[i];
+        if ( DA == 1) {
+            MaxDemand[getTid(pthread_self())][i] = claim[i];
+            Need[getTid(pthread_self())][i] = claim[i];
+        }
+        else {
+            MaxDemand[getTid(pthread_self())][i] = 0;
+            Need[getTid(pthread_self())][i] = 0;
+        }
     }
     return 0;
 }
@@ -63,7 +69,7 @@ int rm_init(int p_count, int r_count, int r_exist[], int avoid) {
 
     // Check fail conditions
     if (N > MAXP || M > MAXR || N < 0 || M < 0 || !(avoid == 0 || avoid == 1)) {
-        printf("Process or resource count can not be negative or more than max value!");
+        //printf("Process or resource count can not be negative or more than max value!");
         return -1;
     }
 
@@ -146,13 +152,8 @@ int rm_request (int request[]) {
         //1: If Request ≤ Need , go to step 2. Otherwise, raise error condition,
         //since process has exceeded its maximum claim.
         for( int i = 0; i< M; i++ ) { //todo: direkt request mi check etmeliyim belki bu check asagı da eklenebilir.
-           if ( Request[getTid(pthread_self())][i] + request[i] > MaxDemand[getTid(pthread_self())][i] ) {
-                printf("Number of requested resources is greater than the maximum demand.");
-                pthread_mutex_unlock(&availableRes_lock);
-                return -1; 
-           }
-           else if ( Allocation[getTid(pthread_self())][i] + request[i] > ExistingRes[i] ) {
-                printf("Number of requested resources with allocated ones is greater than the existing resources.");
+           if ( Request[getTid(pthread_self())][i] + request[i] + Allocation[getTid(pthread_self())][i]> MaxDemand[getTid(pthread_self())][i] ) {
+                //printf("Number of requested resources leads to exceeding of the maximum demand.");
                 pthread_mutex_unlock(&availableRes_lock);
                 return -1; 
            }
@@ -167,20 +168,16 @@ int rm_request (int request[]) {
 
         while (1) {
             int enoughResInsCount = 0;
-            int reqInsInd = -1;
 
             for (int i = 0; i < M; i++) {
                     if (AvailableRes[i] >= request[i]) {
                            enoughResInsCount++;
                     } else {
-                        reqInsInd = i;
                         break;
                     }
             }
             if (enoughResInsCount < M) {
-                    printf("Waiting for resource %d to be %d\n", reqInsInd, request[reqInsInd] );
                     // wait for signal on condition variable
-                    // TODO: wait conditional ??
                     pthread_cond_wait((thread_cv_arr[getTid(pthread_self())]), &availableRes_lock); 
             }
             else {
@@ -193,7 +190,7 @@ int rm_request (int request[]) {
                 int isSafe = safety_check();
                 if (isSafe == 1) {
                     for ( int i = 0; i <M; i++ ) {
-                        Request[getTid(pthread_self())][i] -= request[i]; // TODO: bida bak buna 
+                        Request[getTid(pthread_self())][i] -= request[i]; 
                     }
 
                     for (int j = 0; j < N; j++ ) {
@@ -210,7 +207,7 @@ int rm_request (int request[]) {
                         Need[getTid(pthread_self())][i] += request[i];
 
                     }
-                    printf("Waiting for state to be safe %d!\n", getTid(pthread_self()));
+                    //printf("Waiting for state to be safe %d!\n", getTid(pthread_self()));
                     pthread_cond_wait((thread_cv_arr[getTid(pthread_self())]), &availableRes_lock); 
 
                 }
@@ -221,8 +218,8 @@ int rm_request (int request[]) {
         pthread_mutex_lock(&availableRes_lock);
 
         for( int i = 0; i< M; i++ ) { //todo: direkt request mi check etmeliyim belki bu check asagı da eklenebilir.
-           if ( Request[getTid(pthread_self())][i] + request[i] > MaxDemand[getTid(pthread_self())][i] ) {
-                printf("Number of requested resources is greater than the maximum demand.");
+           if ( Request[getTid(pthread_self())][i] + request[i] + Allocation[getTid(pthread_self())][i]> ExistingRes[i] ) {
+                //printf("Number of requested resources leads to exceed number of the existing resources.");
                 pthread_mutex_unlock(&availableRes_lock);
                 return -1; 
            }
@@ -233,33 +230,28 @@ int rm_request (int request[]) {
         
         while (1) {
             int enoughResInsCount = 0;
-            int reqInsInd = -1;
             /* Lock availableRes before accessing it */
             // Check for source availability
             for (int i = 0; i < M; i++) {
-                //Request[getTid(pthread_self())][i] += request[i]; // TODO: Buradaki artırma isini while dısına almaıyız sanki soru isareti
                 if (AvailableRes[i] >= request[i]) {
                     enoughResInsCount++;
                 } else {
-                    reqInsInd = i;
                     break;
                 }
             }
 
             if (enoughResInsCount < M) {
-                printf("Waiting for resource %d to be %d\n", reqInsInd, request[reqInsInd]);
                 // wait for signal on condition variable
                 // TODO: wait conditional ??
                 pthread_cond_wait((thread_cv_arr[getTid(pthread_self())]), &availableRes_lock);
 
             } else {
-                printf("resource allocated\n");
+                //printf("resource allocated\n");
                 // Allocate resources
                 for (int i = 0; i < M; i++) {
                     AvailableRes[i] -= request[i];
                     Allocation[getTid(pthread_self())][i] += request[i];
                     Request[getTid(pthread_self())][i] -= request[i]; // TODO: bida bak buna 
-                    Need[getTid(pthread_self())][i] -= request[i];
 
                     /* Unlock availableRes after accessing it */
                     pthread_mutex_unlock(&availableRes_lock);
@@ -280,7 +272,8 @@ int rm_release (int release[]) {
     // Check for source availability
     for (int i = 0; i < M; i++) {
        if (Allocation[getTid(pthread_self())][i] < release[i]) {
-            printf("Process can not relase more instance of a resource than it allocated!");
+            //printf("Process can not relase more instance of a resource than it allocated!");
+            pthread_mutex_unlock(&availableRes_lock);
             return -1;
         }
 
@@ -315,7 +308,7 @@ int rm_detection() {
     for (int i = 0; i < N; i++) {
         int isFinished = 1;
         for (int j = 0; j < M; j++) {
-            if (Request[i][j] != 0) {
+            if (Allocation[i][j] != 0) {
                 isFinished = 0;
                 break;
             }

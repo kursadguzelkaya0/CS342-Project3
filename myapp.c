@@ -8,7 +8,7 @@
 #define NUMR 5 // number of resource types
 #define NUMP 3 // number of threads
 int AVOID = 1;
-int exist[ 5]= {8,8,8,8,8}; // resources existing in the system
+int exist[ 5]= {10,8,8,8,10}; // resources existing in the system
 
 void pr(int tid, char astr[], int m, int r[]) {
     int i;
@@ -93,16 +93,20 @@ void *threadfunc3 (void *a) {
     rm_thread_started(tid);
     setarray(claim, NUMR, 8,8,8,8,8);
     rm_claim(claim);
-    setarray(request1, NUMR, 1,0,1,1,0);
+    setarray(request1, NUMR, 5,5,5,5,5);
     pr(tid, "REQ", NUMR, request1);
     rm_request(request1);
     sleep(2);
 
-    setarray(request2, NUMR, 1,0,2,3,4);
+    setarray(request2, NUMR, 3,3,3,3,3);
     pr(tid, "REQ", NUMR, request2);
     rm_request(request2);
+
     rm_release(request1);
+   
+
     rm_release(request2);
+
     rm_thread_ended();
     pthread_exit(NULL);
 }
@@ -133,13 +137,15 @@ int main(int argc, char **argv) {
     tids[i] = i;
     pthread_create(&(threadArray[i]), NULL, (void *) threadfunc2, (void*)&tids[i]);
 
+
     i = 2; // we select a tid for the thread
     tids[i] = i;
     pthread_create(&(threadArray[i]), NULL, (void *) threadfunc3, (void*)&tids[i]);
+    
 
     count = 0;
 
-    while ( count < 20) {
+    while ( count < 15) {
         sleep(1);
         rm_print_state("The current state");
         ret = rm_detection();
